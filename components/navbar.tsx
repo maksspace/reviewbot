@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useAuth } from "@clerk/nextjs"
+import { ReviewBotLogo } from "@/components/reviewbot-logo"
 
 export function Navbar() {
   const { isSignedIn } = useAuth()
@@ -10,7 +11,7 @@ export function Navbar() {
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-2 text-foreground">
-          <span className="text-terminal">{">_"}</span>
+          <ReviewBotLogo size={24} />
           <span className="text-sm font-bold tracking-wider uppercase">
             ReviewBot
           </span>

@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { Settings, LogOut } from "lucide-react"
 import { useUser, useClerk } from "@clerk/nextjs"
+import { ReviewBotLogo } from "@/components/reviewbot-logo"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,7 +39,7 @@ export function DashboardHeader() {
     <header className="border-b border-border bg-background">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
         <Link href="/dashboard" className="flex items-center gap-2 text-foreground">
-          <span className="text-terminal">{">_"}</span>
+          <ReviewBotLogo size={24} />
           <span className="text-sm font-bold tracking-wider uppercase">
             ReviewBot
           </span>

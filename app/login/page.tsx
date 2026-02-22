@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useSignIn } from "@clerk/nextjs"
+import { ReviewBotLogo } from "@/components/reviewbot-logo"
 
 function GitHubIcon() {
   return (
@@ -51,7 +52,7 @@ export default function LoginPage() {
             href="/"
             className="mb-8 inline-flex items-center gap-2 text-foreground"
           >
-            <span className="text-terminal">{">_"}</span>
+            <ReviewBotLogo size={28} />
             <span className="text-sm font-bold tracking-wider uppercase">
               ReviewBot
             </span>
