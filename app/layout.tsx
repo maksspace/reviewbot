@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { JetBrains_Mono } from 'next/font/google'
+import { ClerkProvider } from '@clerk/nextjs'
+import { dark } from '@clerk/themes'
 import { Analytics } from '@vercel/analytics/next'
 import './globals.css'
 
@@ -26,7 +28,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${jetbrainsMono.variable} font-mono antialiased`}>
-        {children}
+        <ClerkProvider
+          appearance={{ baseTheme: dark }}
+          signInUrl="/login"
+          afterSignOutUrl="/"
+        >
+          {children}
+        </ClerkProvider>
         <Analytics />
       </body>
     </html>

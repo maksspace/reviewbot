@@ -1,4 +1,7 @@
+"use client"
+
 import Link from "next/link"
+import { useSignIn } from "@clerk/nextjs"
 
 function GitHubIcon() {
   return (
@@ -29,6 +32,17 @@ function GitLabIcon() {
 }
 
 export default function LoginPage() {
+  const { signIn, isLoaded } = useSignIn()
+
+  const signInWith = (strategy: "oauth_github" | "oauth_gitlab") => {
+    if (!signIn) return
+    signIn.authenticateWithRedirect({
+      strategy,
+      redirectUrl: "/login/sso-callback",
+      redirectUrlComplete: "/dashboard",
+    })
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center px-6">
       <div className="w-full max-w-sm">
@@ -55,7 +69,9 @@ export default function LoginPage() {
           <div className="flex flex-col gap-3">
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-3 border border-border px-4 py-3 text-xs tracking-wider uppercase text-foreground transition-colors hover:border-foreground hover:bg-surface-hover"
+              disabled={!isLoaded}
+              onClick={() => signInWith("oauth_github")}
+              className="flex w-full items-center justify-center gap-3 border border-border px-4 py-3 text-xs tracking-wider uppercase text-foreground transition-colors hover:border-foreground hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50"
             >
               <GitHubIcon />
               Continue with GitHub
@@ -63,7 +79,9 @@ export default function LoginPage() {
 
             <button
               type="button"
-              className="flex w-full items-center justify-center gap-3 border border-border px-4 py-3 text-xs tracking-wider uppercase text-foreground transition-colors hover:border-foreground hover:bg-surface-hover"
+              disabled={!isLoaded}
+              onClick={() => signInWith("oauth_gitlab")}
+              className="flex w-full items-center justify-center gap-3 border border-border px-4 py-3 text-xs tracking-wider uppercase text-foreground transition-colors hover:border-foreground hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50"
             >
               <GitLabIcon />
               Continue with GitLab
