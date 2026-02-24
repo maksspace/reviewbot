@@ -45,20 +45,40 @@ export async function saveProviderTokens(
 ): Promise<void> {
   const cols = tokenColumns(provider)
 
-  const row: Record<string, unknown> = {
-    user_id: userId,
-    [cols.token]: accessToken,
-  }
+  // Try UPDATE first (most common case — row already exists)
+  const update: Record<string, unknown> = { [cols.token]: accessToken }
   if (refreshToken) {
-    row[cols.refresh] = refreshToken
+    update[cols.refresh] = refreshToken
   }
 
-  const { error } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from('user_settings')
-    .upsert(row, { onConflict: 'user_id' })
+    .update(update)
+    .eq('user_id', userId)
+    .select('user_id')
 
-  if (error) {
-    console.error(`[provider-token] failed to save ${provider} tokens:`, error.message)
+  if (updateError) {
+    console.error(`[provider-token] update failed for ${provider}:`, updateError.message)
+  }
+
+  // If no row was updated (first login), INSERT a new row with defaults
+  if (!updated || updated.length === 0) {
+    console.log(`[provider-token] no existing user_settings row, inserting for user ${userId}`)
+    const { error: insertError } = await supabase
+      .from('user_settings')
+      .insert({
+        user_id: userId,
+        [cols.token]: accessToken,
+        ...(refreshToken ? { [cols.refresh]: refreshToken } : {}),
+      })
+
+    if (insertError) {
+      console.error(`[provider-token] insert failed for ${provider}:`, insertError.message, insertError.details)
+    } else {
+      console.log(`[provider-token] saved ${provider} tokens for user ${userId}`)
+    }
+  } else {
+    console.log(`[provider-token] updated ${provider} tokens for user ${userId}`)
   }
 }
 
