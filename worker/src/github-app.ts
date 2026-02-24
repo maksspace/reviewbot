@@ -20,6 +20,25 @@ import { createSign } from 'node:crypto'
 const GITHUB_API = 'https://api.github.com'
 
 /**
+ * Normalize a PEM private key from environment variable format.
+ *
+ * Environment variables often store PEM keys with literal "\n" strings
+ * instead of actual newlines. This converts them so OpenSSL can parse the key.
+ */
+function normalizeKey(key: string): string {
+  // Strip nested quotes layer by layer (Docker .env can produce '"..."' or "'...'")
+  while (
+    (key.startsWith('"') && key.endsWith('"')) ||
+    (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1)
+  }
+  // Replace literal \\n (double-escaped) and \n (single-escaped) with actual newlines
+  key = key.replace(/\\\\n/g, '\n').replace(/\\n/g, '\n')
+  return key.trim()
+}
+
+/**
  * Create a JWT for GitHub App authentication (RS256).
  * Valid for 10 minutes (GitHub maximum).
  */
@@ -67,8 +86,9 @@ export async function getGitHubAppToken(repoName: string): Promise<string | null
   }
 
   try {
-    console.log(`[github-app] creating JWT for app_id=${appId}, repo=${repoName}, key_length=${privateKey.length}`)
-    const jwt = createAppJWT(appId, privateKey)
+    const normalizedKey = normalizeKey(privateKey)
+    console.log(`[github-app] creating JWT for app_id=${appId}, repo=${repoName}, key_length=${privateKey.length}, normalized_length=${normalizedKey.length}`)
+    const jwt = createAppJWT(appId, normalizedKey)
 
     // Step 1: Get installation ID for this repo
     const installRes = await fetch(`${GITHUB_API}/repos/${repoName}/installation`, {
