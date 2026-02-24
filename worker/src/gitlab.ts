@@ -147,6 +147,7 @@ export async function postGitLabReview(
               head_sha: diffRefs.head_sha,
               start_sha: diffRefs.start_sha,
               position_type: 'text',
+              old_path: comment.file,
               new_path: comment.file,
               new_line: comment.line,
             },

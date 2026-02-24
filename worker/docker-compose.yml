@@ -1,0 +1,10 @@
+services:
+  worker:
+    build: .
+    container_name: reviewbot-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TESTCONTAINERS_RYUK_DISABLED=true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
