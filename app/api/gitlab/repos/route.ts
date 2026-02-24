@@ -57,6 +57,8 @@ export async function GET() {
   const cookieStore = await cookies()
   const token = cookieStore.get('provider_token')?.value
 
+  console.log({ token });
+
   if (!token) {
     return NextResponse.json(
       { error: 'No provider token. Please sign in again.' },
