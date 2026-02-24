@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
+import { getValidProviderToken } from '@/lib/provider-token'
 
 interface GitLabProject {
   id: number
@@ -54,10 +55,14 @@ async function fetchAllPages<T>(url: string, token: string): Promise<T[]> {
 }
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get('provider_token')?.value
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
 
-  console.log({ token });
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const token = await getValidProviderToken(supabase, user.id, 'gitlab')
 
   if (!token) {
     return NextResponse.json(

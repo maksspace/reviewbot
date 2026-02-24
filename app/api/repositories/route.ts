@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { cookies } from 'next/headers'
 import { randomBytes } from 'crypto'
 import { createClient } from '@/lib/supabase/server'
+import { getValidProviderToken } from '@/lib/provider-token'
 import { FREE_LIMITS } from '@/lib/stripe'
 
 const WEBHOOK_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -37,116 +37,6 @@ export async function GET() {
   }))
 
   return NextResponse.json(repos)
-}
-
-// ---------------------------------------------------------------------------
-// Token validation + refresh helpers
-// ---------------------------------------------------------------------------
-
-/** Test a GitHub token with a lightweight API call. */
-async function testGitHubToken(token: string): Promise<boolean> {
-  try {
-    const res = await fetch('https://api.github.com/user', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-/** Test a GitLab token with a lightweight API call. */
-async function testGitLabToken(token: string): Promise<boolean> {
-  try {
-    const res = await fetch('https://gitlab.com/api/v4/user', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    return res.ok
-  } catch {
-    return false
-  }
-}
-
-/**
- * Try to refresh a GitHub OAuth token using the refresh token.
- * Returns the new access_token + refresh_token, or null on failure.
- */
-async function refreshGitHubToken(
-  refreshToken: string,
-): Promise<{ access_token: string; refresh_token: string } | null> {
-  const clientId = process.env.GITHUB_CLIENT_ID
-  const clientSecret = process.env.GITHUB_CLIENT_SECRET
-
-  if (!clientId || !clientSecret || !refreshToken) return null
-
-  try {
-    const res = await fetch('https://github.com/login/oauth/access_token', {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-      }),
-    })
-
-    if (!res.ok) return null
-
-    const data = await res.json() as Record<string, unknown>
-    if (data.error || !data.access_token) return null
-
-    return {
-      access_token: data.access_token as string,
-      refresh_token: (data.refresh_token as string) ?? refreshToken,
-    }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Try to refresh a GitLab OAuth token using the refresh token.
- * GitLab OAuth tokens expire after 2 hours. Refresh tokens are valid for longer.
- *
- * Requires env vars: GITLAB_CLIENT_ID, GITLAB_CLIENT_SECRET
- */
-async function refreshGitLabToken(
-  refreshToken: string,
-): Promise<{ access_token: string; refresh_token: string } | null> {
-  const clientId = process.env.GITLAB_CLIENT_ID
-  const clientSecret = process.env.GITLAB_CLIENT_SECRET
-
-  if (!clientId || !clientSecret || !refreshToken) return null
-
-  try {
-    const res = await fetch('https://gitlab.com/oauth/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        client_id: clientId,
-        client_secret: clientSecret,
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-      }),
-    })
-
-    if (!res.ok) return null
-
-    const data = await res.json() as Record<string, unknown>
-    if (data.error || !data.access_token) return null
-
-    return {
-      access_token: data.access_token as string,
-      refresh_token: (data.refresh_token as string) ?? refreshToken,
-    }
-  } catch {
-    return null
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -279,16 +169,6 @@ async function inviteGitLabBotToProject(
   }
 }
 
-/** Refresh a provider token (GitHub or GitLab). */
-async function refreshProviderToken(
-  provider: string,
-  refreshToken: string,
-): Promise<{ access_token: string; refresh_token: string } | null> {
-  if (provider === 'github') return refreshGitHubToken(refreshToken)
-  if (provider === 'gitlab') return refreshGitLabToken(refreshToken)
-  return null
-}
-
 // ---------------------------------------------------------------------------
 // POST — connect repos
 // ---------------------------------------------------------------------------
@@ -301,22 +181,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const cookieStore = await cookies()
-  let providerToken = cookieStore.get('provider_token')?.value ?? ''
-  let providerRefreshToken = cookieStore.get('provider_refresh_token')?.value ?? ''
-
   const body = await request.json()
   const repos: { slug: string; name: string; provider: string }[] = body.repos
 
   if (!repos?.length) {
     return NextResponse.json({ error: 'No repos provided' }, { status: 400 })
-  }
-
-  if (!providerToken) {
-    return NextResponse.json(
-      { error: 'No provider token. Please sign out and sign in again.' },
-      { status: 401 },
-    )
   }
 
   // -------------------------------------------------------------------------
@@ -346,45 +215,21 @@ export async function POST(request: NextRequest) {
   }
 
   // -------------------------------------------------------------------------
-  // Validate the token before storing — fail fast if expired
+  // Get a valid provider token from user_settings (auto-refreshes if expired)
   // -------------------------------------------------------------------------
 
   const provider = repos[0].provider?.toLowerCase()
   const isGitHub = provider === 'github'
-  const tokenValid = isGitHub
-    ? await testGitHubToken(providerToken)
-    : await testGitLabToken(providerToken)
-
   const providerLabel = isGitHub ? 'GitHub' : 'GitLab'
 
-  if (!tokenValid) {
-    console.log(`[repositories] ${providerLabel} token expired, attempting refresh...`)
+  const providerToken = await getValidProviderToken(supabase, user.id, provider)
 
-    if (providerRefreshToken) {
-      const refreshed = await refreshProviderToken(provider, providerRefreshToken)
-
-      if (refreshed) {
-        providerToken = refreshed.access_token
-        providerRefreshToken = refreshed.refresh_token
-        console.log(`[repositories] ${providerLabel} token refreshed successfully`)
-      } else {
-        console.log(`[repositories] ${providerLabel} refresh failed`)
-        return NextResponse.json(
-          { error: 'token_expired', message: `Your ${providerLabel} session has expired. Please sign out and sign in again.` },
-          { status: 401 },
-        )
-      }
-    } else {
-      return NextResponse.json(
-        { error: 'token_expired', message: `Your ${providerLabel} session has expired. Please sign out and sign in again.` },
-        { status: 401 },
-      )
-    }
+  if (!providerToken) {
+    return NextResponse.json(
+      { error: 'token_expired', message: `Your ${providerLabel} session has expired. Please sign out and sign in again.` },
+      { status: 401 },
+    )
   }
-
-  // -------------------------------------------------------------------------
-  // Store repos + enqueue analysis
-  // -------------------------------------------------------------------------
 
   // -------------------------------------------------------------------------
   // For GitLab repos: create webhooks so we receive MR events
@@ -404,6 +249,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Store repos + enqueue analysis
+  // -------------------------------------------------------------------------
+
   const rows = repos.map((r) => {
     const wh = webhookData.get(r.slug)
     return {
@@ -412,8 +261,6 @@ export async function POST(request: NextRequest) {
       name: r.name,
       provider: r.provider,
       status: 'analyzing',
-      provider_token: providerToken,
-      provider_refresh_token: providerRefreshToken || null,
       ...(wh ? { webhook_hook_id: wh.hook_id, webhook_secret: wh.secret } : {}),
     }
   })
@@ -436,7 +283,6 @@ export async function POST(request: NextRequest) {
         slug: r.slug,
         name: r.name,
         provider: r.provider,
-        provider_token: providerToken,
       },
       sleep_seconds: 0,
     })
@@ -446,30 +292,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Build response — update cookies if token was refreshed
-  const response = NextResponse.json({ ok: true, connected: repos.length })
-
-  if (tokenValid === false) {
-    // Token was refreshed — update the cookies
-    response.cookies.set('provider_token', providerToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
-    })
-    if (providerRefreshToken) {
-      response.cookies.set('provider_refresh_token', providerRefreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 30,
-      })
-    }
-  }
-
-  return response
+  return NextResponse.json({ ok: true, connected: repos.length })
 }
 
 export async function DELETE(request: NextRequest) {
@@ -486,10 +309,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'No slug provided' }, { status: 400 })
   }
 
-  // Fetch repo info before deleting — need hook_id + token for GitLab cleanup
+  // Fetch repo info before deleting — need hook_id for GitLab cleanup
   const { data: repo } = await supabase
     .from('connected_repositories')
-    .select('name, provider, provider_token, webhook_hook_id')
+    .select('name, provider, webhook_hook_id')
     .eq('user_id', user.id)
     .eq('slug', slug)
     .single()
@@ -506,8 +329,11 @@ export async function DELETE(request: NextRequest) {
   }
 
   // Clean up GitLab webhook (best-effort, don't fail the request)
-  if (repo?.provider?.toLowerCase() === 'gitlab' && repo.webhook_hook_id && repo.provider_token) {
-    deleteGitLabWebhook(repo.name, repo.webhook_hook_id, repo.provider_token).catch(() => {})
+  if (repo?.provider?.toLowerCase() === 'gitlab' && repo.webhook_hook_id) {
+    const gitlabToken = await getValidProviderToken(supabase, user.id, 'gitlab')
+    if (gitlabToken) {
+      deleteGitLabWebhook(repo.name, repo.webhook_hook_id, gitlabToken).catch(() => {})
+    }
   }
 
   return NextResponse.json({ ok: true })

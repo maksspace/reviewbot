@@ -69,7 +69,7 @@ export async function analyzeRepo(
   // Get a valid provider token (reads fresh from DB, refreshes if expired)
   // -----------------------------------------------------------------------
 
-  const providerToken = await getValidProviderToken(supabase, user_id, slug, provider)
+  const providerToken = await getValidProviderToken(supabase, user_id, provider)
 
   if (!providerToken) {
     console.error(`[analyze] no valid provider_token for ${slug} — skipping (user may need to re-authenticate)`)

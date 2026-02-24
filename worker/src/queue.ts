@@ -13,7 +13,6 @@ export interface RepoAnalysisPayload {
   slug: string
   name: string
   provider: string
-  provider_token: string
 }
 
 const ANALYSIS_QUEUE = 'repo_analysis'

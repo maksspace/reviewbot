@@ -154,76 +154,98 @@ function refreshProviderToken(
   return Promise.resolve(null)
 }
 
+// ---------------------------------------------------------------------------
+// Column mapping for user_settings
+// ---------------------------------------------------------------------------
+
+function tokenColumns(provider: string) {
+  const p = provider.toLowerCase()
+  if (p === 'github') return { token: 'github_token', refresh: 'github_refresh_token' } as const
+  if (p === 'gitlab') return { token: 'gitlab_token', refresh: 'gitlab_refresh_token' } as const
+  throw new Error(`Unsupported provider: ${provider}`)
+}
+
+// ---------------------------------------------------------------------------
+// Read / Update tokens from user_settings
+// ---------------------------------------------------------------------------
+
 /**
- * Read the current provider token + refresh token from the DB for a repo.
- * Returns null if the repo is not found.
+ * Read the current provider token + refresh token from user_settings.
+ * Returns null if no row or no token found.
  */
 export async function readProviderToken(
   supabase: SupabaseClient,
   userId: string,
-  slug: string,
+  provider: string,
 ): Promise<{ provider_token: string; provider_refresh_token: string | null } | null> {
+  const cols = tokenColumns(provider)
+
   const { data, error } = await supabase
-    .from('connected_repositories')
-    .select('provider_token, provider_refresh_token')
+    .from('user_settings')
+    .select(`${cols.token}, ${cols.refresh}`)
     .eq('user_id', userId)
-    .eq('slug', slug)
     .single()
 
   if (error || !data) return null
+
+  const row = data as Record<string, string | null>
+  const token = row[cols.token]
+  if (!token) return null
+
   return {
-    provider_token: data.provider_token,
-    provider_refresh_token: data.provider_refresh_token,
+    provider_token: token,
+    provider_refresh_token: row[cols.refresh] ?? null,
   }
 }
 
 /**
- * Update the stored provider token (and optionally refresh token) in the DB.
- * Updates ALL rows for this user (same token applies to all repos).
+ * Update the stored provider token (and optionally refresh token) in user_settings.
  */
 export async function updateProviderToken(
   supabase: SupabaseClient,
   userId: string,
+  provider: string,
   accessToken: string,
   refreshToken?: string,
 ): Promise<void> {
-  const update: Record<string, unknown> = { provider_token: accessToken }
+  const cols = tokenColumns(provider)
+
+  const update: Record<string, unknown> = { [cols.token]: accessToken }
   if (refreshToken) {
-    update.provider_refresh_token = refreshToken
+    update[cols.refresh] = refreshToken
   }
 
   const { error } = await supabase
-    .from('connected_repositories')
+    .from('user_settings')
     .update(update)
     .eq('user_id', userId)
 
   if (error) {
     console.error(`[token] failed to update tokens in DB:`, error.message)
   } else {
-    console.log(`[token] updated tokens for user ${userId} (all repos)`)
+    console.log(`[token] updated ${provider} tokens for user ${userId}`)
   }
 }
 
 /**
- * Get a valid provider token for a repo, refreshing if needed.
+ * Get a valid provider token for a user, refreshing if needed.
  *
- * 1. Read the current token + refresh token from the DB (fresh, not from stale queue payload)
- * 2. Test the token with a lightweight GitHub API call
- * 3. If expired (401), try to refresh using the refresh token
- * 4. Update the DB with the new tokens
+ * 1. Read the current token + refresh token from user_settings
+ * 2. Test the token with a lightweight API call
+ * 3. If expired, try to refresh using the refresh token
+ * 4. Update user_settings with the new tokens
  * 5. Return the valid token or null if everything fails
  */
 export async function getValidProviderToken(
   supabase: SupabaseClient,
   userId: string,
-  slug: string,
   provider: string,
 ): Promise<string | null> {
   // Step 1: Read fresh from DB
-  const tokens = await readProviderToken(supabase, userId, slug)
+  const tokens = await readProviderToken(supabase, userId, provider)
 
   if (!tokens?.provider_token) {
-    console.error(`[token] no provider_token in DB for ${slug}`)
+    console.error(`[token] no ${provider} token in user_settings for user ${userId}`)
     return null
   }
 
@@ -234,23 +256,23 @@ export async function getValidProviderToken(
     return tokens.provider_token
   }
 
-  console.log(`[token] token expired for ${slug} (${provider}), attempting refresh...`)
+  console.log(`[token] ${provider} token expired for user ${userId}, attempting refresh...`)
 
   // Step 3: Try to refresh
   if (!tokens.provider_refresh_token) {
-    console.error(`[token] no refresh token stored for ${slug} — user needs to re-authenticate`)
+    console.error(`[token] no refresh token stored for ${provider} — user needs to re-authenticate`)
     return null
   }
 
   const refreshed = await refreshProviderToken(provider, tokens.provider_refresh_token)
 
   if (!refreshed) {
-    console.error(`[token] refresh failed for ${slug} — user needs to re-authenticate`)
+    console.error(`[token] refresh failed for ${provider} — user needs to re-authenticate`)
     return null
   }
 
-  // Step 4: Update DB with new tokens (for ALL repos of this user)
-  await updateProviderToken(supabase, userId, refreshed.access_token, refreshed.refresh_token)
+  // Step 4: Update user_settings with new tokens
+  await updateProviderToken(supabase, userId, provider, refreshed.access_token, refreshed.refresh_token)
 
   return refreshed.access_token
 }

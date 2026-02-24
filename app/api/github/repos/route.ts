@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
-import { cookies } from 'next/headers'
+import { createClient } from '@/lib/supabase/server'
+import { getValidProviderToken } from '@/lib/provider-token'
 
 interface GitHubRepo {
   id: number
@@ -14,8 +15,14 @@ interface GitHubRepo {
 }
 
 export async function GET() {
-  const cookieStore = await cookies()
-  const token = cookieStore.get('provider_token')?.value
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const token = await getValidProviderToken(supabase, user.id, 'github')
 
   if (!token) {
     return NextResponse.json(

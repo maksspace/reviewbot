@@ -165,7 +165,7 @@ export async function reviewPR(
   }
 
   // Get a valid provider token (reads fresh from DB, refreshes if expired)
-  const providerToken = await getValidProviderToken(supabase, user_id, repo_slug, provider)
+  const providerToken = await getValidProviderToken(supabase, user_id, provider)
 
   if (!providerToken) {
     console.error(`[review] no valid provider_token for ${repo_slug} — user may need to re-authenticate`)
