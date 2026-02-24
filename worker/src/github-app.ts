@@ -42,13 +42,6 @@ function createAppJWT(appId: string, privateKey: string): string {
 }
 
 /**
- * Normalize the private key — handle \n literals in env vars.
- */
-function normalizeKey(key: string): string {
-  return key.replace(/\\n/g, '\n')
-}
-
-/**
  * Get a GitHub App installation token for a specific repository.
  *
  * Flow:
@@ -60,15 +53,21 @@ function normalizeKey(key: string): string {
  */
 export async function getGitHubAppToken(repoName: string): Promise<string | null> {
   const appId = process.env.GITHUB_APP_ID
-  const privateKeyRaw = process.env.GITHUB_APP_PRIVATE_KEY
+  const privateKey = process.env.GITHUB_APP_PRIVATE_KEY
 
-  if (!appId || !privateKeyRaw) {
+  if (!appId || !privateKey) {
+    console.warn(`[github-app] missing env: GITHUB_APP_ID=${!!appId}, GITHUB_APP_PRIVATE_KEY=${!!privateKey}`)
     return null
   }
 
-  const privateKey = normalizeKey(privateKeyRaw)
+  // Sanity check the key format
+  if (!privateKey.includes('-----BEGIN')) {
+    console.error(`[github-app] GITHUB_APP_PRIVATE_KEY does not look like a PEM key (missing BEGIN header)`)
+    return null
+  }
 
   try {
+    console.log(`[github-app] creating JWT for app_id=${appId}, repo=${repoName}, key_length=${privateKey.length}`)
     const jwt = createAppJWT(appId, privateKey)
 
     // Step 1: Get installation ID for this repo
