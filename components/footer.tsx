@@ -33,6 +33,11 @@ export function Footer() {
             reviewbot.sh
           </span>
         </div>
+        <div className="mt-6 w-full text-center sm:mt-0 sm:w-auto sm:text-right">
+          <span className="text-[10px] tracking-[0.15em] uppercase text-muted-foreground/30">
+            CloudGrip, Inc.
+          </span>
+        </div>
       </div>
     </footer>
   )
