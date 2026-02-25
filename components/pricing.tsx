@@ -22,7 +22,7 @@ const PLANS = [
   },
   {
     name: "Pro",
-    price: "$9",
+    price: "$20",
     period: "/month",
     description: "For teams that ship fast.",
     features: [
@@ -38,9 +38,9 @@ const PLANS = [
 ] as const
 
 export function Pricing() {
-  const [prsPerDay, setPrsPerDay] = useState(5)
+  const [prsPerMonth, setPrsPerMonth] = useState(150)
   const costPerReview = 0.10
-  const monthlyCost = (prsPerDay * costPerReview * 30).toFixed(0)
+  const monthlyCost = (prsPerMonth * costPerReview).toFixed(0)
 
   return (
     <section id="pricing" className="px-6 py-32">
@@ -129,14 +129,15 @@ export function Pricing() {
                 <input
                   id="pr-slider"
                   type="range"
-                  min="1"
-                  max="100"
-                  value={prsPerDay}
-                  onChange={(e) => setPrsPerDay(Number(e.target.value))}
+                  min="10"
+                  max="3000"
+                  step="10"
+                  value={prsPerMonth}
+                  onChange={(e) => setPrsPerMonth(Number(e.target.value))}
                   className="h-1 w-48 cursor-pointer appearance-none bg-border accent-terminal [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-none [&::-webkit-slider-thumb]:bg-terminal"
                 />
-                <span className="min-w-[80px] text-sm text-foreground">
-                  {prsPerDay} PRs/day
+                <span className="min-w-[120px] text-sm text-foreground">
+                  {prsPerMonth} PRs/month
                 </span>
               </div>
 
