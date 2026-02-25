@@ -148,7 +148,7 @@ export function RepoPicker({
               onClick={() => setOpen(false)}
               className="text-xs font-bold tracking-wider uppercase text-terminal hover:underline"
             >
-              Upgrade to Pro — $9/mo
+              Upgrade to Pro — $20/mo
             </Link>
           </div>
         )}

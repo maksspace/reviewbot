@@ -204,7 +204,7 @@ export default function SettingsPage() {
             onClick={handleUpgrade}
             className="border border-terminal px-5 py-2 text-xs tracking-wider uppercase text-terminal transition-colors hover:bg-terminal hover:text-background disabled:pointer-events-none disabled:opacity-50"
           >
-            {upgrading ? "Redirecting..." : "Upgrade to Pro — $9/mo"}
+            {upgrading ? "Redirecting..." : "Upgrade to Pro — $20/mo"}
           </button>
         )}
       </div>
